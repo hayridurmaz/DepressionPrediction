@@ -2,8 +2,8 @@ import csv
 
 import matplotlib.pyplot as plt  # to plot error during training
 import numpy as np  # helps with the math
-from NeuralNetwork import NeuralNetwork
-from Person import Person
+from src.NeuralNetwork import NeuralNetwork
+from src.Person import Person
 
 
 def parsePeople():
@@ -12,7 +12,7 @@ def parsePeople():
     # dataset = pd.read_csv('data/foreveralone.csv', parse_dates=['time'],
     #                       date_parser=d_parser)
     # parseAPerson(dataset["gender"])
-    with open('data/foreveralone.csv') as csv_file:
+    with open('../data/foreveralone.csv') as csv_file:
         csv_reader = csv.reader(csv_file, delimiter=',')
         line_count = 0
         for row in csv_reader:

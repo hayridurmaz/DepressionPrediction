@@ -1,112 +1,103 @@
-import csv
-
-import matplotlib.pyplot as plt  # to plot error during training
 import numpy as np  # helps with the math
-from src.NeuralNetwork import NeuralNetwork
-from src.Person import Person
+import numpy as np  # helps with the math
+import pandas as pd
+
+from src.NeuralNetwork import Network
+
+
+# Randomly permute [0,N] and extract indices for each fold
+def crossval_folds(N, n_folds, seed=1):
+    np.random.seed(seed)
+    idx_all_permute = np.random.permutation(N)
+    N_fold = int(N / n_folds)
+    idx_folds = []
+    for i in range(n_folds):
+        start = i * N_fold
+        end = min([(i + 1) * N_fold, N])
+        idx_folds.append(idx_all_permute[start:end])
+    return idx_folds
 
 
 def parsePeople():
-    persons = []
-    # d_parser = lambda x: datetime.strptime(x, '%m/%d/%Y %H:%M:%S')
-    # dataset = pd.read_csv('data/foreveralone.csv', parse_dates=['time'],
-    #                       date_parser=d_parser)
-    # parseAPerson(dataset["gender"])
-    with open('../data/foreveralone.csv') as csv_file:
-        csv_reader = csv.reader(csv_file, delimiter=',')
-        line_count = 0
-        for row in csv_reader:
-            if line_count == 0:
-                print(f'Column names are {", ".join(row)}')
-                line_count += 1
-            else:
-                newPerson = Person(row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8], row[9],
-                                   row[10], row[11], row[12], row[13], row[14], row[15], row[16], row[17], row[18])
-                persons.append(newPerson)
-                line_count += 1
-        return persons
+    normalize = True
+    target_name = "depressed"
+    df = pd.read_csv('data/foreveralone.csv', delimiter=",", dtype={target_name: str})
+    target2idx = {target: idx for idx, target in enumerate(sorted(list(set(df[target_name].values))))}
+    X = df.drop([target_name], axis=1).values
+    enums = []
+    personVals = []
+    for col in df:
+        if col == 'job_title' or col == 'depressed' or col == 'time' or col == 'social_fear' or col == 'what_help_from_others' or col == 'attempt_suicide' or col == 'improve_yourself_how':
+            continue
+        enum = {target: idx for idx, target in enumerate(sorted(list(set(df[col].values))))}
+        enums.append(enum)
+        personVals.append(np.vectorize(lambda x: enum[x])(df[col].values))
 
-
-def normalizeFriend(friendNumber):
-    friendNumber = float(friendNumber)
-    if friendNumber > 100:
-        return 1
-    else:
-        return friendNumber / 100
-
-
-def parseInputForAPerson(person):
-    value = []
-    if person.gender == "Male":
-        value.append(0)
-    else:
-        value.append(1)
-
-
-
-    # if person.sexuallity == "Straight":
-    #     value.append(0)
-    # else:
-    #     value.append(1)
-    #
-    # if person.virgin == "Yes":
-    #     value.append(0)
-    # else:
-    #     value.append(1)
-    #
-    # if person.pay_for_sex == "No":
-    #     value.append(0)
-    # else:
-    #     value.append(1)
-
-    # value.append(normalizeFriend(person.friends))
-    return value
-
-
-def parseOutputForAPerson(person):
-    value = []
-    if person.depressed == "No":
-        value.append(0)
-    else:
-        value.append(1)
-    return value
+    personVals = np.array(personVals).T
+    # X = df.drop([target_name], axis=1).values
+    y = np.vectorize(lambda x: target2idx[x])(df[target_name].values)
+    n_classes = len(target2idx.keys())
+    if X.shape[0] != y.shape[0]:
+        raise Exception("X.shape = {} and y.shape = {} are inconsistent!".format(X.shape, y.shape))
+    if normalize:
+        personVals = (personVals - personVals.mean(axis=0)) / personVals.std(axis=0)
+    return personVals, y, n_classes
 
 
 if __name__ == '__main__':
-    persons = parsePeople()
-    inputs = []
-    outputs = []
-    training = persons[0:400]
-    tests = persons[401:]
-    for person in persons:
-        inputs.append(parseOutputForAPerson(person))
-        outputs.append(parseOutputForAPerson(person))
-    # input data
-    # inputs = np.array([[0, 1, 0],
-    #                    [0, 1, 1],
-    #                    [0, 0, 0],
-    #                    [1, 0, 0],
-    #                    [1, 1, 1],
-    #                    [1, 0, 1]])
-    # output data
-    # outputs = np.array([[0], [0], [0], [1], [1], [1]])
-    NN = NeuralNetwork(np.array(inputs), np.array(outputs))
-    # train neural network
-    NN.train()
+    hidden_layers = [5]  # number of nodes in hidden layers i.e. [layer1, layer2, ...]
+    eta = 0.1  # learning rate
+    n_epochs = 400  # number of training epochs
+    n_folds = 4  # number of folds for cross-validation
+    seed_crossval = 1  # seed for cross-validation
+    seed_weights = 1  # seed for NN weight initialization
 
-    # print the predictions for both examples
-    for person in tests:
-        if NN.predict(parseInputForAPerson(person))[0] == 0.07442911:
-            print(person)
-        print(NN.predict(parseOutputForAPerson(person)), ' - Correct: ', parseOutputForAPerson(person))
-        if NN.predict(parseInputForAPerson(person)) < 0.5 and parseOutputForAPerson(person) == 1:
-            print(NN.predict(parseInputForAPerson(person)), ' - Correct: ', parseOutputForAPerson(person))
-        if NN.predict(parseInputForAPerson(person)) > 0.5 and parseOutputForAPerson(person) == 0:
-            print(NN.predict(parseInputForAPerson(person)), ' - Correct: ', parseOutputForAPerson(person))
+    # Read csv data + normalize features
+    print("Reading '{}'...".format('data/foreveralone.csv'))
+    X, y, n_classes = parsePeople()
+    print(" -> X.shape = {}, y.shape = {}, Number of classes = {}\n".format(X.shape, y.shape, n_classes))
+    N, d = X.shape
 
-    # plot the error over the entire training duration
-    plt.figure(figsize=(15, 5))
-    plt.plot(NN.epoch_list, NN.error_history)
-    plt.xlabel('Epoch')
-    plt.ylabel('Error')
-    # plt.show()
+    print("Neural network model:")
+    print(" input dimensions:= {}".format(d))
+    print(" hidden_layers = {}".format(hidden_layers))
+    print(" output dimensions = {}".format(n_classes))
+    print(" eta = {}".format(eta))
+    print(" n_epochs = {}".format(n_epochs))
+    print(" n_folds = {}".format(n_folds))
+    print(" seed_crossval = {}".format(seed_crossval))
+    print(" seed_weights = {}\n".format(seed_weights))
+
+    # Create cross-validation folds
+    idx_all = np.arange(0, N)
+    idx_folds = crossval_folds(N, n_folds, seed=seed_crossval)  # list of list of fold indices
+
+    # Train/evaluate the model on each fold
+    acc_train, acc_valid = list(), list()
+    print("Cross-validating with {} folds...".format(len(idx_folds)))
+    for i, idx_valid in enumerate(idx_folds):
+        # Collect training and test data from folds
+        idx_train = np.delete(idx_all, idx_valid)
+        X_train, y_train = X[idx_train], y[idx_train]
+        X_valid, y_valid = X[idx_valid], y[idx_valid]
+
+        # Build neural network classifier model and train
+        model = Network(input_dim=d, output_dim=n_classes,
+                        hidden_layers=hidden_layers, seed=seed_weights)
+        model.train(X_train, y_train, eta=eta, n_epochs=n_epochs)
+
+        # Make predictions for training and test data
+        ypred_train = model.predict(X_train)
+        ypred_valid = model.predict(X_valid)
+
+        # Compute training/test accuracy score from predicted values
+        acc_train.append(100 * np.sum(y_train == ypred_train) / len(y_train))
+        acc_valid.append(100 * np.sum(y_valid == ypred_valid) / len(y_valid))
+
+        # Print cross-validation result
+        print(" Fold {}/{}: acc_train = {:.2f}%, acc_valid = {:.2f}% (n_train = {}, n_valid = {})".format(
+            i + 1, n_folds, acc_train[-1], acc_valid[-1], len(X_train), len(X_valid)))
+
+    # Print results
+    print("  -> acc_train_avg = {:.2f}%, acc_valid_avg = {:.2f}%".format(
+        sum(acc_train) / float(len(acc_train)), sum(acc_valid) / float(len(acc_valid))))

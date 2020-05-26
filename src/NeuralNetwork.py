@@ -1,3 +1,6 @@
+import math
+import random
+
 import numpy as np  # helps with the math
 
 
@@ -8,7 +11,9 @@ class NeuralNetwork:
         self.inputs = inputs
         self.outputs = outputs
         # initialize weights as .50 for simplicity
-        self.weights = np.array([[.50]])
+        self.weights = np.array(
+            [[.50], [.50], [.50], [.50], [.50], [.50], [.50], [.50], [.50], [.50], [.50], [.50], [.50], [.50], [.50],
+             [.50]])
         self.error_history = []
         self.epoch_list = []
 
@@ -46,126 +51,117 @@ class NeuralNetwork:
 
 
 class Network:
+    def __init__(self, input_dim=None, output_dim=None, hidden_layers=None, seed=1):
+        if (input_dim is None) or (output_dim is None) or (hidden_layers is None):
+            raise Exception("Invalid arguments given!")
+        self.input_dim = input_dim  # number of input nodes
+        self.output_dim = output_dim  # number of output nodes
+        self.hidden_layers = hidden_layers  # number of hidden nodes @ each layer
+        self.network = self._build_network(seed=seed)
 
-    ## Ağırlıklarımızı ve bias değerlerimizi burada oluşturulmaktadır.
-    def __init__(self):
+    # Train network
+    def train(self, X, y, eta=0.5, n_epochs=200):
+        for epoch in range(n_epochs):
+            for (x_, y_) in zip(X, y):
+                self._forward_pass(x_)  # forward pass (update node["output"])
+                yhot_ = self._one_hot_encoding(y_, self.output_dim)  # one-hot target
+                self._backward_pass(yhot_)  # backward pass error (update node["delta"])
+                self._update_weights(x_, eta)  # update weights (update node["weight"])
 
-        # Ağ üzerinden 3 adet nöron olduğu için
-        # 6 adet ağırlık ve 3 adet bias değeri olmalı
-        self.w1 = np.random.normal()
-        self.w2 = np.random.normal()
-        self.w3 = np.random.normal()
-        self.w4 = np.random.normal()
-        self.w5 = np.random.normal()
-        self.w6 = np.random.normal()
+    # Predict using argmax of logits
+    def predict(self, X):
+        ypred = np.array([np.argmax(self._forward_pass(x_)) for x_ in X], dtype=np.int)
+        return ypred
 
-        self.b1 = np.random.normal()
-        self.b2 = np.random.normal()
-        self.b3 = np.random.normal()
+    # ==============================
+    #
+    # Internal functions
+    #
+    # ==============================
 
-    ## Sigmoid fonksiyonu
-    def sigmoid(self, x):
+    # Build fully-connected neural network (no bias terms)
+    def _build_network(self, seed=1):
+        random.seed(seed)
 
-        # Sigmoid aktivasyon fonksiyonu : f(x) = 1 / (1 + e^(-x))
-        return 1 / (1 + np.exp(-x))
+        # Create a single fully-connected layer
+        def _layer(input_dim, output_dim):
+            layer = []
+            for i in range(output_dim):
+                weights = [random.random() for _ in range(input_dim)]  # sample N(0,1)
+                node = {"weights": weights,  # list of weights
+                        "output": None,  # scalar
+                        "delta": None}  # scalar
+                layer.append(node)
+            return layer
 
-    ## Sigmoid fonksiyonunun türevi
-    def sigmoid_turev(self, x):
+        # Stack layers (input -> hidden -> output)
+        network = []
+        if len(self.hidden_layers) == 0:
+            network.append(_layer(self.input_dim, self.output_dim))
+        else:
+            network.append(_layer(self.input_dim, self.hidden_layers[0]))
+            for i in range(1, len(self.hidden_layers)):
+                network.append(_layer(self.hidden_layers[i - 1], self.hidden_layers[i]))
+            network.append(_layer(self.hidden_layers[-1], self.output_dim))
 
-        # Sigmoid fonksiyonunun türevi: f'(x) = f(x) * (1 - f(x))
-        sig = self.sigmoid(x)
-        result = sig * (1 - sig)
+        return network
 
-        return result
+    # Forward-pass (updates node['output'])
+    def _forward_pass(self, x):
+        transfer = self._sigmoid
+        x_in = x
+        for layer in self.network:
+            x_out = []
+            for node in layer:
+                node['output'] = transfer(self._dotprod(node['weights'], x_in))
+                x_out.append(node['output'])
+            x_in = x_out  # set output as next input
+        return x_in
 
-    def mse_loss(self, y_real, y_prediction):
+    # Backward-pass (updates node['delta'], L2 loss is assumed)
+    def _backward_pass(self, yhot):
+        transfer_derivative = self._sigmoid_derivative  # sig' = f(sig)
+        n_layers = len(self.network)
+        for i in reversed(range(n_layers)):  # traverse backwards
+            if i == n_layers - 1:
+                # Difference between logits and one-hot target
+                for j, node in enumerate(self.network[i]):
+                    err = node['output'] - yhot[j]
+                    node['delta'] = err * transfer_derivative(node['output'])
+            else:
+                # Weighted sum of deltas from upper layer
+                for j, node in enumerate(self.network[i]):
+                    err = sum([node_['weights'][j] * node_['delta'] for node_ in self.network[i + 1]])
+                    node['delta'] = err * transfer_derivative(node['output'])
 
-        # y_real ve y_prediction aynı boyutta numpy arrayleri olmalıdır.
-        return ((y_real - y_prediction) ** 2).mean()
+    # Update weights (updates node['weight'])
+    def _update_weights(self, x, eta):
+        for i, layer in enumerate(self.network):
+            # Grab input values
+            if i == 0:
+                inputs = x
+            else:
+                inputs = [node_['output'] for node_ in self.network[i - 1]]
+            # Update weights
+            for node in layer:
+                for j, input in enumerate(inputs):
+                    # dw = - learning_rate * (error * transfer') * input
+                    node['weights'][j] += - eta * node['delta'] * input
 
-    ## İleri beslemeli nöronlar üzerinden tahmin
-    ## değerinin elde edilmesi
+    # Dot product
+    def _dotprod(self, a, b):
+        return sum([a_ * b_ for (a_, b_) in zip(a, b)])
 
-    def feedforward(self, row):
+    # Sigmoid (activation function)
+    def _sigmoid(self, x):
+        return 1.0 / (1.0 + math.exp(-x))
 
-        # h1 nöronunun değeri
-        h1 = self.sigmoid((self.w1 * row[0]) + (self.w2 * row[1]) + self.b1)
+    # Sigmoid derivative
+    def _sigmoid_derivative(self, sigmoid):
+        return sigmoid * (1.0 - sigmoid)
 
-        # h2 nöronunun değeri
-        h2 = self.sigmoid((self.w3 * row[0]) + (self.w4 * row[1]) + self.b2)
-
-        # Tahmin değeri 01 nöronun değeri
-        o1 = self.sigmoid((self.w5 * h1) + (self.w6 * h2) + self.b3)
-
-        return o1
-
-        ## Belitiler iteresyon sayısı kadar model eğitimi
-
-    def train(self, data, labels):
-
-        learning_rate = 0.001
-        epochs = 10000
-
-        for epoch in range(epochs):
-
-            for x, y in zip(data, labels):
-                # Neuron H1
-                sumH1 = (self.w1 * x[0]) + (self.w2 * x[1]) + self.b1
-                H1 = self.sigmoid(sumH1)
-
-                # Neuron H2
-                sumH2 = (self.w3 * x[0]) + (self.w4 * x[1]) + self.b2
-                H2 = self.sigmoid(sumH2)
-
-                # Neuron O1
-                sumO1 = (self.w5 * H1) + (self.w6 * H2) + self.b3
-                O1 = self.sigmoid(sumO1)
-
-                # Tahmin değerimiz
-                prediction = O1
-
-                # Türevlerin Hesaplanması
-                # dL/dYpred :  y = doğru değer | prediciton: tahmin değeri
-                dLoss_dPrediction = -2 * (y - prediction)
-
-                # Nöron H1 için ağırlık ve bias türevleri
-                dH1_dW1 = x[0] * self.sigmoid_turev(sumH1)
-                dH1_dW2 = x[1] * self.sigmoid_turev(sumH1)
-                dH1_dB1 = self.sigmoid_turev(sumH1)
-
-                # Nöron H2 için ağırlık ve bias türevleri
-                dH2_dW3 = x[0] * self.sigmoid_turev(sumH2)
-                dH2_dW4 = x[1] * self.sigmoid_turev(sumH2)
-                dH2_dB2 = self.sigmoid_turev(sumH2)
-
-                # Nöron O1 (output) için ağırlık ve bias türevleri
-                dPrediction_dW5 = H1 * self.sigmoid_turev(sumO1)
-                dPrediction_dW6 = H1 * self.sigmoid_turev(sumO1)
-                dPrediction_dB3 = self.sigmoid_turev(sumO1)
-
-                # Aynı zamanda tahmin değerinin H1 ve H2'ye göre türevlerinin de
-                # hesaplanması gerekmektedir.
-                dPrediction_dH1 = self.w5 * self.sigmoid_turev(sumO1)
-                dPrediction_dH2 = self.w6 * self.sigmoid_turev(sumO1)
-
-                ## Ağırlık ve biasların güncellenmesi
-
-                # H1 nöronu için güncelleme
-                self.w1 = self.w1 - (learning_rate * dLoss_dPrediction * dPrediction_dH1 * dH1_dW1)
-                self.w2 = self.w2 - (learning_rate * dLoss_dPrediction * dPrediction_dH1 * dH1_dW2)
-                self.b1 = self.b1 - (learning_rate * dLoss_dPrediction * dPrediction_dH1 * dH1_dB1)
-
-                # H2 nöronu için güncelleme
-                self.w3 = self.w3 - (learning_rate * dLoss_dPrediction * dPrediction_dH2 * dH2_dW3)
-                self.w4 = self.w4 - (learning_rate * dLoss_dPrediction * dPrediction_dH2 * dH2_dW4)
-                self.b2 = self.b2 - (learning_rate * dLoss_dPrediction * dPrediction_dH2 * dH2_dB2)
-
-                # O1 nöronu için güncelleme
-                self.w5 = self.w5 - (learning_rate * dLoss_dPrediction * dPrediction_dW5)
-                self.w6 = self.w6 - (learning_rate * dLoss_dPrediction * dPrediction_dW6)
-                self.b3 = self.b3 - (learning_rate * dLoss_dPrediction * dPrediction_dB3)
-
-            predictions = np.apply_along_axis(self.feedforward, 1, data)
-            loss = self.mse_loss(labels, predictions)
-            print("Devir %d loss: %.7f" % (epoch, loss))
-
+    # One-hot encoding
+    def _one_hot_encoding(self, idx, output_dim):
+        x = np.zeros(output_dim, dtype=np.int)
+        x[idx] = 1
+        return x

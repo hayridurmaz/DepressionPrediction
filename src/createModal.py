@@ -1,5 +1,6 @@
 import numpy as np  # helps with the math
 import pandas as pd
+import time
 
 # Randomly permute [0,N] and extract indices for each fold
 from src.NeuralNetwork import Network
@@ -49,11 +50,11 @@ def parsePerson(person_str, df):
     person_str = 'time,gender,sexuallity,age,income,race,bodyweight,virgin,prostitution_legal,pay_for_sex,friends,' \
                  'social_fear,depressed,what_help_from_others,attempt_suicide,employment,job_title,edu_level,' \
                  'improve_yourself_how\n' + person_str
-    # file = open('temp.csv', 'w+')
+    # file = open('testperson.csv', 'w+')
     # file.write(unicode(str, errors='replace'))
     # file.close()
     target_name = "depressed"
-    temp_person = pd.read_csv('temp.csv', delimiter=",", dtype={target_name: str})
+    temp_person = pd.read_csv('data/testperson.csv', delimiter=",", dtype={target_name: str})
 
     personVals = []
     for col in temp_person:
@@ -70,10 +71,11 @@ def parsePerson(person_str, df):
 
 
 if __name__ == '__main__':
-    hidden_layers = [5]  # number of nodes in hidden layers i.e. [layer1, layer2, ...]
+    start_time = time.time()
+    hidden_layers = [2]  # number of nodes in hidden layers i.e. [layer1, layer2, ...]
     eta = 0.1  # learning rate
-    n_epochs = 400  # number of training epochs
-    n_folds = 4  # number of folds for cross-validation
+    n_epochs = 200  # number of training epochs
+    n_folds = 8  # number of folds for cross-validation
     seed_crossval = 1  # seed for cross-validation
     seed_weights = 1  # seed for NN weight initialization
 
@@ -112,7 +114,7 @@ if __name__ == '__main__':
         model = Network(input_dim=d, output_dim=n_classes,
                         hidden_layers=hidden_layers, seed=seed_weights)
         model.train(X_train, y_train, eta=eta, n_epochs=n_epochs)
-        print(model.predict(parsePerson('sa', df)))
+        # print(model.predict(parsePerson('sa', df)))
         # Make predictions for training and test data
         ypred_train = model.predict(X_train)
         ypred_valid = model.predict(X_valid)
@@ -128,3 +130,4 @@ if __name__ == '__main__':
     # Print results
     print("  -> acc_train_avg = {:.2f}%, acc_valid_avg = {:.2f}%".format(
         sum(acc_train) / float(len(acc_train)), sum(acc_valid) / float(len(acc_valid))))
+    print("--- %s seconds ---" % (time.time() - start_time))

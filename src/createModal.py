@@ -1,6 +1,7 @@
+import time
+
 import numpy as np  # helps with the math
 import pandas as pd
-import time
 
 # Randomly permute [0,N] and extract indices for each fold
 from src.NeuralNetwork import Network
@@ -19,14 +20,14 @@ def crossval_folds(N, n_folds, seed=1):
 
 
 def parsePeople():
-    normalize = True
+    # target_name = "attempt_suicide"
     target_name = "depressed"
     df = pd.read_csv('data/foreveralone.csv', delimiter=",", dtype={target_name: str})
     target2idx = {target: idx for idx, target in enumerate(sorted(list(set(df[target_name].values))))}
     X = df.drop([target_name], axis=1).values
     personVals = []
     for col in df:
-        if col == 'job_title' or col == 'depressed' or col == 'time' or col == 'social_fear' or col == 'what_help_from_others' or col == 'attempt_suicide' or col == 'improve_yourself_how':
+        if col == 'job_title' or col == 'time' or col == target_name:
             continue
         enum = {target: idx for idx, target in enumerate(sorted(list(set(df[col].values))))}
         personVals.append(np.vectorize(lambda x: enum[x])(df[col].values))
@@ -37,22 +38,11 @@ def parsePeople():
     n_classes = len(target2idx.keys())
     if X.shape[0] != y.shape[0]:
         raise Exception("X.shape = {} and y.shape = {} are inconsistent!".format(X.shape, y.shape))
-    if normalize:
-        personVals = (personVals - personVals.mean(axis=0)) / personVals.std(axis=0)
+    personVals = (personVals - personVals.mean(axis=0)) / personVals.std(axis=0)
     return personVals, y, n_classes, df
 
 
 def parsePerson(person_str, df):
-    person_str = '9/4/2016 23:10:04,Male,Straight,28,"$40,000 to $49,999",White non-Hispanic,Normal weight,Yes,No,' \
-                 'Yes but I ' \
-                 'haven\'t, 3.0, Yes, Yes, "wingman/wingwoman, Set me up with a date, date coaching", No, Employed for ' \
-                 'wages, Scientist, Master’s degree, Therapy '
-    person_str = 'time,gender,sexuallity,age,income,race,bodyweight,virgin,prostitution_legal,pay_for_sex,friends,' \
-                 'social_fear,depressed,what_help_from_others,attempt_suicide,employment,job_title,edu_level,' \
-                 'improve_yourself_how\n' + person_str
-    # file = open('testperson.csv', 'w+')
-    # file.write(unicode(str, errors='replace'))
-    # file.close()
     target_name = "depressed"
     temp_person = pd.read_csv('data/testperson.csv', delimiter=",", dtype={target_name: str})
 
@@ -64,9 +54,6 @@ def parsePerson(person_str, df):
         personVals.append(np.vectorize(lambda x: enum[x])(temp_person[col].values))
 
     personVals = np.array(personVals).T
-    # X = df.drop([target_name], axis=1).values
-
-    # personVals = (personVals - personVals.mean(axis=0)) / personVals.std(axis=0)
     return personVals
 
 
@@ -75,7 +62,7 @@ if __name__ == '__main__':
     hidden_layers = [2]  # number of nodes in hidden layers i.e. [layer1, layer2, ...]
     eta = 0.1  # learning rate
     n_epochs = 200  # number of training epochs
-    n_folds = 8  # number of folds for cross-validation
+    n_folds = 2  # number of folds for cross-validation
     seed_crossval = 1  # seed for cross-validation
     seed_weights = 1  # seed for NN weight initialization
 
